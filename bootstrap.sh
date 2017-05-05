@@ -1,14 +1,17 @@
 #!/bin/sh
 
+# エラー回避用
+export DEBIAN_FRONTEND=noninteractive
+
 # 多重に実行されないようにする
-sudo -sh c 'test -f /etc/bootstrapped && exit'
+sudo sh -c 'test -f /etc/bootstrapped && exit'
 
 # aptで入れられるものは基本的にaptで
 sudo apt update
 sudo apt install -y git g++ make parted language-pack-ja-base language-pack-ja kpartx gdb
 sudo update-locale LANG=ja_JP.UTF-8 LANGUAGE="ja_JP:ja"
 # この辺りは筆者の趣味
-sudo apt install emacs silversearcher-ag
+sudo apt install -y emacs silversearcher-ag
 
 # install qemu
 sudo apt-get install -y libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev
@@ -36,10 +39,10 @@ cd ..
 # 仮想環境はホストとよく時刻がずれる。ホストと仮想環境の時刻が
 # ずれていると、makeの時にエラーが出て鬱陶しいので、NTPで補正する
 # TODO: ホストが適切に時刻同期されていない場合、どうする?
-sudo apt-get install ntp
+sudo apt-get install -y ntp
 sudo service ntp stop
 sudo ntpdate ntp.nict.jp
-sed -i -e 's/^server/#server/g' /etc/ntp.conf
+sudo sed -i -e 's/^server/#server/g' /etc/ntp.conf
 sudo sh -c 'echo "server ntp.nict.jp" >> /etc/ntp.conf'
 sudo service ntp start
 
