@@ -11,6 +11,8 @@ sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
 sudo apt update
 sudo apt install -y git g++-6 make parted language-pack-ja-base language-pack-ja kpartx gdb
 sudo update-locale LANG=ja_JP.UTF-8 LANGUAGE="ja_JP:ja"
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
+sudo update-alternatives --config gcc
 # この辺りは筆者の趣味
 sudo apt install -y emacs silversearcher-ag
 
