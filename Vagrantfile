@@ -26,5 +26,9 @@ Vagrant.configure(2) do |config|
       "--pae", "on",
       "--paravirtprovider", "kvm",
     ]
+    vb.customize [
+      "guestproperty", "set", :id,
+      "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", 1000
+    ]
   end
 end

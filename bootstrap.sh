@@ -41,20 +41,9 @@ tar zxvf edk2-UDK2017.tar.gz
 # cp Build/OvmfX64/DEBUG_GCC48/FV/*.fd ~/edk2-UDK2017
 # cd ..
 
-# ホストとの時刻同期のためにNTPのインストール
-# 仮想環境はホストとよく時刻がずれる。ホストと仮想環境の時刻が
-# ずれていると、makeの時にエラーが出て鬱陶しいので、NTPで補正する
-# TODO: ホストが適切に時刻同期されていない場合、どうする?
-sudo apt-get install -y ntp
-sudo service ntp stop
-sudo ntpdate ntp.nict.jp
-sudo sed -i -e 's/^server/#server/g' /etc/ntp.conf
-sudo sh -c 'echo "server ntp.nict.jp" >> /etc/ntp.conf'
-sudo service ntp start
-
-sudo sh -c 'date > /etc/bootstrapped'
-
 sudo mkdir "/mnt/baremetal"
 sudo mkdir "/mnt/efi"
+
+sudo sh -c 'date > /etc/bootstrapped'
 
 echo "setup done!"
