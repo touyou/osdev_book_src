@@ -1,5 +1,12 @@
+/*
+ * boot.S
+ * 仮想メモリの設定、IA-32eモードへの移行、C言語コードへの踏み台
+ */
+ 
 #define ASM_FILE
 #include "multiboot2.h"
+#include "segment.h"
+#include "paging.h"
 
 #define MULTIBOOTHEADER_SIZE (multibootheader_end - multibootheader_start)
 
@@ -53,5 +60,93 @@ multibootheader_end:
 
 .text
 entry:
+  // この時点で既に32bitプロテクトモード
   cli
+
+  movl $(initial_stack_buffer + 0x1000), %esp
+
+  // TODO: cpuid命令の存在チェック
+  // TODO: IA-32eモードの存在チェック
+
+  // PML4Tをセット
+	movl $pml4t, %edi
+  movl %edi, %cr3
+
+  //
+  // ページテーブルの構築
+  //
+
+  // PML4Tの第一エントリはPDPT1を指す
+  movl $pml4t, %edi
+  movl $pdpt1, %eax
+  orl  $(PML4E_PRESENT_BIT | PML4E_WRITE_BIT | PML4E_USER_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  // PDPT1の第一エントリは物理アドレス0x0を指す
+  movl $pdpt1, %edi
+  movl $0, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  // ページテーブルの構築はここまで
+
+  // PAE&PGEビットを立てる
+  movl %cr4, %eax
+  orl  $(1 << 5 | 1 << 7), %eax
+  movl %eax, %cr4
+
+  //
+  // IA-32eモードへの移行
+  //
+
+  // LMビットを立てる
+  movl $0xC0000080, %ecx
+  rdmsr
+  orl  $(1 << 8), %eax
+  wrmsr
+
+  // PG bitを立てる
+  movl %cr0, %eax
+  orl  $(1 << 31), %eax
+  movl %eax, %cr0
+  lgdt gdtr
+  ljmp $KERNEL_CS, $entry64
+  
+.code64
+entry64:
+  // IA-32eモード
+  movl $KERNEL_DS, %eax
+  movw %ax, %ds
+  movw %ax, %es
+  movw %ax, %fs
+  movw %ax, %gs
+  movw %ax, %ss
+  movq $(initial_stack_buffer + 0x1000), %rsp
   hlt
+
+.data 
+.balign 8
+gdt_desc:
+  // null descriptor
+  .quad 0
+  .quad 0
+  .quad 0x00209a0000000000  // code descriptor
+  .quad 0x0000920000000000  // data descriptor
+  
+  .word 0
+gdtr:
+  .word 8*4 - 1
+  .quad gdt_desc
+
+.bss
+.balign 4096  
+initial_stack_buffer:
+  .skip 4096
+
+pml4t:
+  .skip 4096
+
+pdpt1:
+  .skip 4096
