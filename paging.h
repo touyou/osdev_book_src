@@ -1,5 +1,7 @@
 /*
- * paging.h
+ *            paging.h
+ * written by Shinichi Awamoto, 2017
+ *
  * ページング周りの定義
  */
 

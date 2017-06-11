@@ -1,5 +1,7 @@
 /*
- * boot.S
+ *            boot.S
+ * written by Shinichi Awamoto, 2017
+ * 
  * 仮想メモリの設定、IA-32eモードへの移行、C言語コードへの踏み台
  */
  

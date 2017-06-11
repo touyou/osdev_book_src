@@ -1,5 +1,7 @@
 /*
- * segment.h
+ *            segment.h
+ * written by Shinichi Awamoto, 2017
+ *
  * セグメンテーション関連の定義
  */
 
