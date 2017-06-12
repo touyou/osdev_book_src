@@ -15,7 +15,7 @@ OVMF_DIR = /home/vagrant/edk2-UDK2017/
 TELNET_ADDR = 127.0.0.1
 TELNET_PORT = 1235
 
-FLAGS = -ggdb3 -O3 -Wall -Werror=return-type -Werror=unused-result -nostdinc -nostdlib -fno-builtin -MMD -MP
+FLAGS = -ggdb3 -O0 -Wall -Werror=return-type -Werror=unused-result -nostdinc -nostdlib -fno-builtin -MMD -MP
 ASFLAGS += $(FLAGS)
 CFLAGS += $(FLAGS) -std=c99
 
