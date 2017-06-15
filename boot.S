@@ -65,6 +65,8 @@ entry:
   // この時点で既に32bitプロテクトモード
   cli
 
+  movl %ebx, (multiboot_info)
+
   movl $(initial_stack_buffer + 0x1000), %esp
 
   // TODO: cpuid命令の存在チェック
@@ -126,7 +128,11 @@ entry64:
   movw %ax, %gs
   movw %ax, %ss
   movq $(initial_stack_buffer + 0x1000), %rsp
+  call cmain
+
+loop: 
   hlt
+  jmp loop
 
 .data 
 .balign 8
@@ -152,3 +158,4 @@ pml4t:
 
 pdpt1:
   .skip 4096
+
