@@ -5,8 +5,10 @@
  * 各種ハードウェア初期化関数の呼び出し
  */
 
-#include "stdint.h"
+#include "common.h"
 #include "multiboot2.h"
+#include "acpi.h"
+#include "framebuffer.h"
 
 uint32_t multiboot_info;
 
@@ -25,17 +27,32 @@ void cmain() {
   for (struct multiboot_tag *tag = (struct multiboot_tag *)(uint64_t)(multiboot_info + 8); tag->type != MULTIBOOT_TAG_TYPE_END; tag = (struct multiboot_tag *) ((multiboot_uint8_t *) tag + ((tag->size + 0b111) & ~0b111))) {
     switch(tag->type) {
     case MULTIBOOT_TAG_TYPE_ACPI_OLD:
-      __asm__ volatile("hlt;nop;");
+      {
+        // ACPI RSDPテーブルの取得
+        struct multiboot_tag_old_acpi *acpi = (struct multiboot_tag_old_acpi *)tag;
+        acpi_init((struct rsdp_descriptor *)acpi->rsdp);
+      }
       break;
-    case MULTIBOOT_TAG_TYPE_ACPI_NEW:
-      __asm__ volatile("hlt;nop;nop;nop;");
+    case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
+      {
+        // framebuffer tagの取得
+        framebuffer_init((struct multiboot_tag_framebuffer_common *)tag);
+      }
       break;
     default:
       break;
     }
   }
   
+  // TODO ここにコードを追加
+
   while(1) {
     __asm__ volatile("hlt;");
+  }
+}
+
+void panic() {
+  while(1) {
+    __asm__ volatile("cli;hlt;nop;");
   }
 }
