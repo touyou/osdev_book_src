@@ -68,15 +68,45 @@ entry:
   movl $(initial_stack_buffer + 0x1000), %esp
 
   // TODO: cpuid命令の存在チェック
+  // ! FLAGSの21bit目がcpuidがあるかどうかを表している(Vol.2の一行目)
+  // FLAGSをEAXにコピーする
+  pushfl
+  pop %eax
+  // ECXに現在の値を保存しておく
+  movl %eax, %ecx
+  // FLAGSの値の21bit目が1ならひっくり返す
+  xorl $(1<<21), %eax
+  // EAXの計算し終えた値をFLAGSに戻す
+  push %eax
+  popfl
+  // ここまでが前計算。FLAGSはこの時点で正常ならflipしているはず。
+  // ここからecxの値と比較する。
+  pushfl
+  pop %eax
+  // FLAGSをもとに戻しておく
+  push %ecx
+  popfl
+  // 比較してecxとeaxが同じならerrorラベルのhltにいく(存在しないから)
+  xorl %ecx, %eax
+  jz error
   // TODO: IA-32eモードの存在チェック
+  // Intel 64 archならCPUID.80000001H:EDX[29]=1と書いてある(Vol.3.3.1)
+  // CPUIDはeaxを80000001hにした時拡張機能フラグをedxとecxに保存
+  // edx[29]が1ならIA-32eモードがある
+  movl $0x80000001, %eax
+  cpuid
+  test $(1<<29), %edx
+  jz error
 
   // PML4Tをセット
-	movl $pml4t, %edi
+  movl $pml4t, %edi
   movl %edi, %cr3
 
   //
   // ページテーブルの構築
   //
+
+
 
   // PML4Tの第一エントリはPDPT1を指す
   movl $pml4t, %edi
@@ -89,6 +119,25 @@ entry:
   movl $pdpt1, %edi
   movl $0, %eax
   orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  // pdの先頭を入れる
+  movl $(pdpt1+2048), %edi
+  movl $pd, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  movl $pd, %edi
+  movl $pt, %eax
+  orl  $(PDE_PRESENT_BIT | PDE_WRITE_BIT | PDE_USER_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  movl $pt, %edi
+  movl $0x100000, %eax
+  orl $(PTE_PRESENT_BIT | PTE_WRITE_BIT | PTE_USER_BIT), %eax
   movl %eax, (%edi)
   movl $0, 4(%edi)
 
@@ -115,7 +164,10 @@ entry:
   movl %eax, %cr0
   lgdt gdtr
   ljmp $KERNEL_CS, $entry64
-  
+
+error:
+  hlt 
+
 .code64
 entry64:
   // IA-32eモード
@@ -152,3 +204,10 @@ pml4t:
 
 pdpt1:
   .skip 4096
+
+pd:
+  .skip 4096
+
+pt:
+  .skip 4096
+
