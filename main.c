@@ -33,6 +33,13 @@ void cmain() {
         acpi_init((struct rsdp_descriptor *)acpi->rsdp);
       }
       break;
+    case MULTIBOOT_TAG_TYPE_ACPI_NEW:
+      {
+        // ACPI RSDPテーブルの取得
+        struct multiboot_tag_new_acpi *acpi = (struct multiboot_tag_new_acpi *)tag;
+        acpi_init((struct rsdp_descriptor *)acpi->rsdp);
+      }
+      break;
     case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
       {
         // framebuffer tagの取得
