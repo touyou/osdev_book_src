@@ -18,7 +18,7 @@ void framebuffer_init(struct multiboot_tag_framebuffer_common *tag) {
 }
 
 // char文字の描画
-static void framebuffer_putc() {
+static void framebuffer_putc(char c) {
   // TODO
 }
 
