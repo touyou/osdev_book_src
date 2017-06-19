@@ -16,6 +16,12 @@ typedef __UINT32_TYPE__ uint32_t;
 typedef __INT64_TYPE__ int64_t;
 typedef __UINT64_TYPE__ uint64_t;
 
+typedef __builtin_va_list va_list;
+
+#define va_start(v,l)   __builtin_va_start(v,l)
+#define va_end(v)       __builtin_va_end(v)
+#define va_arg(v,l)     __builtin_va_arg(v,l)
+
 void panic();
 
 enum ReturnCode {
