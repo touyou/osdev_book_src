@@ -94,6 +94,24 @@ entry:
   movl %eax, (%edi)
   movl $0, 4(%edi)
 
+  movl $(pdpt1+8), %edi
+  movl $0x40000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  movl $(pdpt1+16), %edi
+  movl $0x80000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
+  movl $(pdpt1+24), %edi
+  movl $0xc0000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, (%edi)
+  movl $0, 4(%edi)
+
   // ページテーブルの構築はここまで
 
   // PAE&PGEビットを立てる

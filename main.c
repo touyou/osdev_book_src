@@ -12,6 +12,38 @@
 
 uint32_t multiboot_info;
 
+uint64_t get_nanosec() {
+  struct hpet_descriptor *hp = acpi_get_hpet_desc();
+  uint64_t addr = hp->address;
+  *((uint64_t *)(addr+0x10)) |= 1;
+  uint32_t ccp = *((uint32_t *)(addr + 4));
+  uint64_t mcv = *((uint64_t *)(addr + 0xf0));
+  return ccp * mcv / 1000000;
+}
+
+void cost_exec() {
+  // HPET 取得コスト
+  uint64_t sec_arr[101];
+  uint64_t sum = 0;
+  for(int i=0; i<101; ++i) {
+    sec_arr[i] = get_nanosec();
+    if (i != 0) sum += sec_arr[i] - sec_arr[i-1];
+  }
+  uint64_t d_sum = 0;
+  for(int i=1; i<101; ++i) {
+    d_sum += (sec_arr[i]-sec_arr[i-1]-sum/100)*(sec_arr[i]-sec_arr[i-1]-sum/100);
+  }
+  framebuffer_printf("ave. %d disp. %d", sum / 100, d_sum / 100);
+
+  // DMAコスト
+  struct hpet_descriptor *hp = acpi_get_hpet_desc();
+  uint64_t addr = hp->address;
+  *((uint64_t *)(addr+0x10)) |= 1;
+  uint32_t ccp = *((uint32_t *)(addr + 4));
+  uint64_t res = framebuffer_ntimesput((uint64_t *)(addr + 0xf0));
+  framebuffer_printf(" dma. %d nsec\n", ccp*res/1000000);
+}
+
 void cmain() {
   // TODO check multiboot2 magic number
 
@@ -45,7 +77,8 @@ void cmain() {
   }
   
   // TODO ここにコードを追加
-
+  for (int i=0; i<10; i++) cost_exec();
+  
   while(1) {
     __asm__ volatile("hlt;");
   }
