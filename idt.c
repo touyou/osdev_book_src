@@ -14,7 +14,7 @@ idt_callback callback[256];
 static uint16_t idtr[5];
 
 void handle_int(struct regs *rs) {
-  __asm__ volatile("cli");
+  __asm__ volatile("cli;");
   if (callback[rs->n] != NULL) {
     callback[rs->n](rs);
     apic_send_eoi();

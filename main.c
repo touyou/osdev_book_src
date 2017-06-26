@@ -11,6 +11,11 @@
 #include "framebuffer.h"
 #include "idt.h"
 #include "multiboot2.h"
+#include "segment.h"
+
+void func(struct regs *rs) {
+  __asm__ volatile("cli;hlt;");
+}
 
 void cmain() {
   struct rsdp_descriptor *rsdp = multiboot_get_rsdp_desc();
@@ -31,13 +36,15 @@ void cmain() {
   }
   apic_init(madt);
 
-  apic_enable_lapic();
-
-  apic_start_other_processors();
+  gdt_init();
 
   idt_init();
 
   idt_init_for_each_proc();
+
+  apic_enable_lapic();
+
+  apic_start_other_processors();
 
   // TODO ここにコードを追加
 
@@ -48,6 +55,8 @@ void cmain() {
 
 void cmain_for_ap() {
   apic_initialize_ap();
+
+  gdt_init();
 
   idt_init_for_each_proc();
 

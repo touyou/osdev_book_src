@@ -9,8 +9,6 @@
 #include "acpi.h"
 #include "common.h"
 
-#define MAX_CPU (256)
-
 struct apic_manager {
   int ncpu;
   uint8_t lapicid[MAX_CPU];
@@ -39,6 +37,7 @@ static struct apic_manager manager;
 #define LAPIC_REG_ICR_LEVEL_ASSERT (1 << 14)
 #define LAPIC_REG_ICR_TRIGGER_MODE_EDGE (0 << 15)
 #define LAPIC_REG_ICR_TRIGGER_MODE_LEVEL (1 << 15)
+#define LAPIC_REG_ICR_DESTSHORTHAND_NOSHORTHAND (0 << 18)
 
 // Intel SDM Vol 3, Figure 10-23. Spurious-Interrupt Vector Register (SVR)より
 #define LAPIC_REG_SVR_FLAG_APIC_ENABLE (1 << 8)
@@ -86,6 +85,9 @@ void apic_init(struct apic_descriptor *madt) {
       break;
     }
     }
+    if (manager.ncpu == MAX_CPU) {
+      break;
+    }
     offset += header->length;
   }
 }
@@ -106,6 +108,12 @@ void apic_enable_lapic() {
 
 void apic_send_eoi() {
   write_lapic_reg(LAPIC_REG_OFFSET_EOI, 0);
+}
+
+// destidで指定したAPIC IDに対してIPIを送信する
+// IPIを受け取ったコアは、vector番の割り込みハンドラを実行する
+void apic_send_ipi(uint8_t destid, int vector) {
+  write_icr(destid, LAPIC_DELIVERY_MODE_FIXED | LAPIC_REG_ICR_TRIGGER_MODE_LEVEL | LAPIC_REG_ICR_DESTSHORTHAND_NOSHORTHAND | vector);
 }
 
 void entryothers(); 

@@ -24,6 +24,8 @@ typedef __builtin_va_list va_list;
 
 #define panic() while(1){__asm__ volatile("cli;hlt;nop;");}
 
+#define MASK(val, ebit, sbit) ((val) & (((1 << ((ebit) - (sbit) + 1)) - 1) << (sbit)))
+
 enum ReturnCode {
   SUCCESS,
   ERROR,
