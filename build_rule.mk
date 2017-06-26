@@ -1,6 +1,6 @@
 include common.mk
 
-OBJS = acpi.o apic.o boot.o bootap.o framebuffer.o font.o main.o multiboot2.o
+OBJS = acpi.o apic.o boot.o bootap.o framebuffer.o font.o idt.o int.o main.o multiboot2.o
 DEPS = $(filter %.d, $(subst .o,.d, $(OBJS)))
 KERNEL = kernel.elf
 IMAGEFILE = disk.img

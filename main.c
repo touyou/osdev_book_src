@@ -9,6 +9,7 @@
 #include "apic.h"
 #include "common.h"
 #include "framebuffer.h"
+#include "idt.h"
 #include "multiboot2.h"
 
 void cmain() {
@@ -33,7 +34,11 @@ void cmain() {
   apic_enable_lapic();
 
   apic_start_other_processors();
-  
+
+  idt_init();
+
+  idt_init_for_each_proc();
+
   // TODO ここにコードを追加
 
   while(1) {
@@ -43,6 +48,8 @@ void cmain() {
 
 void cmain_for_ap() {
   apic_initialize_ap();
+
+  idt_init_for_each_proc();
 
   // TODO ここにコードを追加
 
