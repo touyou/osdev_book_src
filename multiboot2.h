@@ -372,6 +372,13 @@ struct multiboot_tag_efi_mmap
   multiboot_uint8_t efi_mmap[0];
 }; 
 
+// additionally written by Shinichi Awamoto, 2017
+struct rsdp_descriptor;
+struct rsdp_descriptor *multiboot_get_rsdp_desc();
+
+struct multiboot_tag_framebuffer_common;
+struct multiboot_tag_framebuffer_common *multiboot_get_framebuffer();
+
 #endif /* ! ASM_FILE */
 
 #endif /* ! MULTIBOOT_HEADER */

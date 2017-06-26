@@ -42,5 +42,31 @@ struct hpet_descriptor {
   uint8_t page_protection;
 } __attribute__((packed));
 
+struct apic_descriptor {
+  struct acpi_sdt_header header;
+  uint32_t local_interrupt_controller_address;
+  uint32_t flags;
+  uint8_t table[0];
+} __attribute__((packed));
+
+struct apic_struct_header {
+  uint8_t type;
+  uint8_t length;
+} __attribute__((packed));
+
+enum ApicStructHeader {
+  APIC_STRUCT_TYPE_LAPIC = 0,
+};
+
+struct local_apic_struct {
+  struct apic_struct_header header;
+  uint8_t acpi_processor_id;
+  uint8_t lapic_id;
+  uint32_t flags;
+} __attribute__((packed));
+
+#define LOCAL_APIC_STRUCT_FLAG_ENABLE (1)
+
 void acpi_init(struct rsdp_descriptor *rsdp);
 struct hpet_descriptor *acpi_get_hpet_desc();
+struct apic_descriptor *acpi_get_apic_desc();

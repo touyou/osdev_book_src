@@ -21,8 +21,7 @@
 
 .balign 8
 
-.extern initial_stack_buffer
-.extern initial_PML4T
+.globl pml4t
   
 .extern main
 multibootheader_start:
@@ -87,12 +86,27 @@ entry:
   movl %eax, (%edi)
   movl $0, 4(%edi)
 
-  // PDPT1の第一エントリは物理アドレス0x0を指す
+  // PDPT1に4GBストレートマップする
   movl $pdpt1, %edi
   movl $0, %eax
   orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
   movl %eax, (%edi)
   movl $0, 4(%edi)
+  
+  movl $0x40000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, 8(%edi)
+  movl $0, 12(%edi)
+
+  movl $0x80000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, 16(%edi)
+  movl $0, 20(%edi)
+
+  movl $0xC0000000, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT | PDPTE_1GPAGE_BIT), %eax
+  movl %eax, 24(%edi)
+  movl $0, 28(%edi)
 
   // ページテーブルの構築はここまで
 

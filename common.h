@@ -22,7 +22,7 @@ typedef __builtin_va_list va_list;
 #define va_end(v)       __builtin_va_end(v)
 #define va_arg(v,l)     __builtin_va_arg(v,l)
 
-void panic();
+#define panic() while(1){__asm__ volatile("cli;hlt;nop;");}
 
 enum ReturnCode {
   SUCCESS,
@@ -30,3 +30,8 @@ enum ReturnCode {
 };
 
 #define NULL ((void *)0)
+
+static inline void outb(int pin, uint8_t data) {
+  __asm__ volatile("outb %%al, %%dx"::"d"(pin), "a"(data));
+}
+

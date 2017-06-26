@@ -6,6 +6,7 @@
  */
 
 #include "framebuffer.h"
+#include "multiboot2.h"
 #include "common.h"
 
 static struct multiboot_tag_framebuffer_common *framebuffer_tag;
@@ -90,7 +91,7 @@ framebuffer_printf(char *fmt, ...)
   va_start(ap, fmt);
 
   if (fmt == 0)
-    panic("null fmt");
+    panic();
 
   for(i = 0; (c = fmt[i] & 0xff) != 0; i++){
     if(c != '%'){

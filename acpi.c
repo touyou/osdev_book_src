@@ -43,3 +43,23 @@ struct hpet_descriptor *acpi_get_hpet_desc() {
 
   return NULL;
 }
+
+// MADT取得関数
+// 戻り値：見つからなかった場合はNULLを返す
+struct apic_descriptor *acpi_get_apic_desc() {
+  if (rsdt == NULL) {
+    return NULL;
+  }
+
+  int entries = (rsdt->h.length - sizeof(rsdt->h)) / 4;
+
+  for (int i = 0; i < entries; i++) {
+    struct acpi_sdt_header *h = (struct acpi_sdt_header *)(uint64_t)rsdt->ptr_to_other_sdt[i];
+    if (__builtin_strncmp(h->signature, "APIC", 4) == 0) {
+      struct apic_descriptor *madt = (struct apic_descriptor *)h;
+      return madt;
+    }
+  }
+
+  return NULL;
+}
