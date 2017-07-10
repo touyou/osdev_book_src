@@ -1,0 +1,492 @@
+diff --git a/apic.c b/apic.c
+index c6993df..1eb00f6 100644
+--- a/apic.c
++++ b/apic.c
+@@ -1,7 +1,7 @@
+ /*
+  *            acpi.h
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * APIC関連の関数の定義
+  */
+ 
+@@ -67,7 +67,7 @@ static inline void write_icr(uint8_t dest, uint32_t flags) {
+ void apic_init(struct apic_descriptor *madt) {
+   manager.lapic_base_addr = madt->local_interrupt_controller_address;
+   manager.ncpu = 0;
+-  
++
+   // MADTを解析して、Local APIC IDの一覧を取得する
+   for (uint32_t offset = sizeof(struct apic_descriptor); offset < madt->header.length;) {
+     struct apic_struct_header *header = (struct apic_struct_header *)((uint8_t *)madt + offset);
+@@ -116,7 +116,7 @@ void apic_send_ipi(uint8_t destid, int vector) {
+   write_icr(destid, LAPIC_DELIVERY_MODE_FIXED | LAPIC_REG_ICR_TRIGGER_MODE_LEVEL | LAPIC_REG_ICR_DESTSHORTHAND_NOSHORTHAND | vector);
+ }
+ 
+-void entryothers(); 
++void entryothers();
+ 
+ #define IO_PORT_RTC (0x70)
+ 
+@@ -169,9 +169,9 @@ void apic_start_other_processors() {
+   for (int i = 1; i < manager.ncpu; i++) {
+     is_ap_booted = 0;
+     stack_for_ap[0] = (uint64_t)&stack_buffer_for_ap[i * 4096];
+-    
++
+     start_ap(i);
+-    
++
+     while(!is_ap_booted) {
+       __asm__ volatile("pause;":::"memory");
+     }
+@@ -181,6 +181,17 @@ void apic_start_other_processors() {
+ // AP用のAPIC初期化ルーチン
+ void apic_initialize_ap() {
+   is_ap_booted = 1;
+-  
++
+   apic_enable_lapic();
+ }
++
++// APIC IDを返す
++uint8_t apic_get_id() {
++  uint32_t addr = manager.lapic_base_addr + 0x20; // ダミー実装
++  return *((uint32_t *)(addr+3));
++}
++
++// ハードウェアスレッド数を返す
++int apic_get_cpu_nums() {
++  return manager.ncpu;
++}
+diff --git a/apic.h b/apic.h
+index fd25d66..f07bdca 100644
+--- a/apic.h
++++ b/apic.h
+@@ -18,3 +18,5 @@ void apic_send_eoi();
+ void apic_send_ipi(uint8_t destid, int vector);
+ void apic_start_other_processors();
+ void apic_initialize_ap();
++uint8_t apic_get_id();
++int apic_get_cpu_nums();
+diff --git a/boot.S b/boot.S
+index 9e3e965..b7be2e0 100644
+--- a/boot.S
++++ b/boot.S
+@@ -21,7 +21,8 @@
+ 
+ .balign 8
+ 
+-.globl pml4t
++  .globl pml4t
++  .globl pt1
+   
+ .extern main
+ multibootheader_start:
+@@ -108,6 +109,18 @@ entry:
+   movl %eax, 24(%edi)
+   movl $0, 28(%edi)
+ 
++
++  movl $pd1, %eax
++  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT), %eax
++  movl %eax, 2048(%edi)
++  movl $0, 2052(%edi)
++
++  movl $pd1, %edi
++  movl $pt1, %eax
++  orl  $(PDE_PRESENT_BIT | PDE_WRITE_BIT | PDE_USER_BIT), %eax
++  movl %eax, 0(%edi)
++  movl $0, 4(%edi)
++
+   // ページテーブルの構築はここまで
+ 
+   // PAE&PGEビットを立てる
+@@ -173,3 +186,9 @@ pml4t:
+ pdpt1:
+   .skip 4096
+ 
++pd1:
++  .skip 4096
++
++pt1:
++  .skip 4096
++
+diff --git a/build_rule.mk b/build_rule.mk
+index 4ad6466..53c0ccf 100644
+--- a/build_rule.mk
++++ b/build_rule.mk
+@@ -62,7 +62,7 @@ $(MOUNT_DIR)/core/$(KERNEL): $(MOUNT_DIR)/core/ $(KERNEL)
+ .PHONY: runqemu killqemu
+ 
+ runqemu: image
+-	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
++	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -m 1G -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
+ 	sleep 0.2s
+ 	echo "set_password vnc a" | netcat $(TELNET_ADDR) $(TELNET_PORT)
+ 
+diff --git a/common.h b/common.h
+index ed79157..ab8281f 100644
+--- a/common.h
++++ b/common.h
+@@ -1,7 +1,7 @@
+ /*
+  *            common.h
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * よく使われる定義や関数宣言のまとめ
+  */
+ 
+@@ -37,3 +37,4 @@ static inline void outb(int pin, uint8_t data) {
+   __asm__ volatile("outb %%al, %%dx"::"d"(pin), "a"(data));
+ }
+ 
++uint8_t font[128][8];
+\ No newline at end of file
+diff --git a/framebuffer.c b/framebuffer.c
+index 2be7263..3742348 100644
+--- a/framebuffer.c
++++ b/framebuffer.c
+@@ -1,7 +1,7 @@
+ /*
+  *            framebuffer.c
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * 画面描画関連の関数の定義
+  */
+ 
+@@ -18,9 +18,43 @@ void framebuffer_init(struct multiboot_tag_framebuffer_common *tag) {
+   framebuffer_tag = tag;
+ }
+ 
++#define MARGIN 4
++
+ // char文字の描画
+ static void framebuffer_putc(char c) {
+   // TODO
++  uint32_t width = framebuffer_tag->framebuffer_width;
++  uint32_t height = framebuffer_tag->framebuffer_height;
++  uint8_t bpp = framebuffer_tag->framebuffer_bpp / 8;
++  unsigned char *p = (unsigned char *)framebuffer_tag->framebuffer_addr;
++
++  static int x = MARGIN;
++  static int y = MARGIN;
++
++  if (c == '\n') {
++    x = MARGIN;
++    y += 8 + MARGIN;
++  } else {
++    for (int i=0; i<8; ++i) {
++      for (int j=0; j<8; ++j) {
++        int npos = (i+y) * bpp * width + (j+x) * bpp;
++        if (font[c][i]>>(7-j)&1) {
++            p[npos] = 0x00;
++            p[npos+1] = 0xff;
++            p[npos+2] = 0x00;
++        } else {
++            p[npos] = 0x00;
++            p[npos+1] = 0x00;
++            p[npos+2] = 0x00;
++        }
++      }
++    }
++    x+= 8 + MARGIN;
++    if (x >= width-MARGIN) {
++        x = MARGIN;
++        y += 8 + MARGIN;
++    }
++  }
+ }
+ 
+ // https://github.com/swetland/xv6 より引用
+@@ -49,6 +83,7 @@ static void framebuffer_putc(char c) {
+ /* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+ 
+ static char digits[] = "0123456789abcdef";
++volatile int lock = 0;
+ 
+ static void
+ framebuffer_printptr(uint64_t x) {
+@@ -92,7 +127,7 @@ framebuffer_printf(char *fmt, ...)
+ 
+   if (fmt == 0)
+     panic();
+-
++  while (__sync_lock_test_and_set(&lock, 1));
+   for(i = 0; (c = fmt[i] & 0xff) != 0; i++){
+     if(c != '%'){
+       framebuffer_putc(c);
+@@ -127,4 +162,5 @@ framebuffer_printf(char *fmt, ...)
+       break;
+     }
+   }
++  __sync_lock_release(&lock);
+ }
+diff --git a/kadai11_base.patch b/kadai11_base.patch
+new file mode 100644
+index 0000000..b5ddae5
+--- /dev/null
++++ b/kadai11_base.patch
+@@ -0,0 +1,159 @@
++diff --git a/apic.c b/apic.c
++index c6993df..a10e13b 100644
++--- a/apic.c
+++++ b/apic.c
++@@ -184,3 +184,13 @@ void apic_initialize_ap() {
++   
++   apic_enable_lapic();
++ }
+++
+++// APIC IDを返す
+++uint8_t apic_get_id() {
+++  return 0; // ダミー実装
+++}
+++
+++// ハードウェアスレッド数を返す
+++int apic_get_cpu_nums() {
+++  return manager.ncpu;
+++}
++diff --git a/apic.h b/apic.h
++index fd25d66..f07bdca 100644
++--- a/apic.h
+++++ b/apic.h
++@@ -18,3 +18,5 @@ void apic_send_eoi();
++ void apic_send_ipi(uint8_t destid, int vector);
++ void apic_start_other_processors();
++ void apic_initialize_ap();
+++uint8_t apic_get_id();
+++int apic_get_cpu_nums();
++diff --git a/boot.S b/boot.S
++index 9e3e965..b7be2e0 100644
++--- a/boot.S
+++++ b/boot.S
++@@ -21,7 +21,8 @@
++ 
++ .balign 8
++ 
++-.globl pml4t
+++  .globl pml4t
+++  .globl pt1
++   
++ .extern main
++ multibootheader_start:
++@@ -108,6 +109,18 @@ entry:
++   movl %eax, 24(%edi)
++   movl $0, 28(%edi)
++ 
+++
+++  movl $pd1, %eax
+++  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT), %eax
+++  movl %eax, 2048(%edi)
+++  movl $0, 2052(%edi)
+++
+++  movl $pd1, %edi
+++  movl $pt1, %eax
+++  orl  $(PDE_PRESENT_BIT | PDE_WRITE_BIT | PDE_USER_BIT), %eax
+++  movl %eax, 0(%edi)
+++  movl $0, 4(%edi)
+++
++   // ページテーブルの構築はここまで
++ 
++   // PAE&PGEビットを立てる
++@@ -173,3 +186,9 @@ pml4t:
++ pdpt1:
++   .skip 4096
++ 
+++pd1:
+++  .skip 4096
+++
+++pt1:
+++  .skip 4096
+++
++diff --git a/build_rule.mk b/build_rule.mk
++index 4ad6466..53c0ccf 100644
++--- a/build_rule.mk
+++++ b/build_rule.mk
++@@ -62,7 +62,7 @@ $(MOUNT_DIR)/core/$(KERNEL): $(MOUNT_DIR)/core/ $(KERNEL)
++ .PHONY: runqemu killqemu
++ 
++ runqemu: image
++-	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
+++	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -m 1G -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
++ 	sleep 0.2s
++ 	echo "set_password vnc a" | netcat $(TELNET_ADDR) $(TELNET_PORT)
++ 
++diff --git a/main.c b/main.c
++index c388008..44c07a8 100644
++--- a/main.c
+++++ b/main.c
++@@ -12,10 +12,11 @@
++ #include "idt.h"
++ #include "multiboot2.h"
++ #include "segment.h"
+++#include "paging.h"
++ 
++-void func(struct regs *rs) {
++-  __asm__ volatile("cli;hlt;");
++-}
+++int status = 0;
+++
+++extern uint64_t pt1[256];
++ 
++ void cmain() {
++   struct rsdp_descriptor *rsdp = multiboot_get_rsdp_desc();
++@@ -44,9 +45,27 @@ void cmain() {
++ 
++   apic_enable_lapic();
++ 
+++  // TODO 課題A: ここでページフォルトハンドラを登録する事
+++  
+++  int *ptr = (int *)((uint64_t)0x4000000000);
+++
+++  *ptr = 0;
+++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
+++
+++  __sync_fetch_and_add(&status, 1);
+++
++   apic_start_other_processors();
++ 
++-  // TODO ここにコードを追加
+++  while(status != apic_get_cpu_nums()) {
+++  }
+++
+++  pt1[0] = PTE_PRESENT_BIT | PTE_WRITE_BIT | PTE_USER_BIT | (0x1000000 + 4096);
+++  *ptr = 0;
+++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
+++
+++  // TODO 課題B: TLB shootdown通知コードをここに書く事
+++
+++  __sync_fetch_and_add(&status, 1);
++ 
++   while(1) {
++     __asm__ volatile("hlt;");
++@@ -60,7 +79,25 @@ void cmain_for_ap() {
++ 
++   idt_init_for_each_proc();
++ 
++-  // TODO ここにコードを追加
+++  // TODO 課題B: ここでTLB shootdown受信ハンドラを登録する事
+++
+++  int *ptr = (int *)((uint64_t)0x4000000000);
+++
+++  while(status != apic_get_id()) {
+++  }
+++
+++  (*ptr)++;
+++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
+++    
+++  __sync_fetch_and_add(&status, 1);
+++
+++  while(status != apic_get_id() + apic_get_cpu_nums()) {
+++  }
+++  
+++  (*ptr)++;
+++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
+++
+++  __sync_fetch_and_add(&status, 1);
++ 
++   while(1) {
++     __asm__ volatile("hlt;");
+diff --git a/main.c b/main.c
+index c388008..d1d5dc8 100644
+--- a/main.c
++++ b/main.c
+@@ -1,7 +1,7 @@
+ /*
+  *            main.c
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * 各種ハードウェア初期化関数の呼び出し
+  */
+ 
+@@ -12,9 +12,22 @@
+ #include "idt.h"
+ #include "multiboot2.h"
+ #include "segment.h"
++#include "paging.h"
+ 
+-void func(struct regs *rs) {
+-  __asm__ volatile("cli;hlt;");
++int status = 0;
++
++extern uint64_t pt1[256];
++
++void fault_handler(struct regs *rs) {
++    pt1[0] = PTE_PRESENT_BIT | PTE_WRITE_BIT | PTE_USER_BIT | (0x1000000 + 4096);
++}
++
++void ipi_handler(struct regs *rs) {
++}
++
++void ipi_recv_handler(struct regs *rs) {
++    uint64_t m = 0x1000100;
++    __asm__ volatile("invlpg (%0)"::"b"(m):"memory");
+ }
+ 
+ void cmain() {
+@@ -44,9 +57,32 @@ void cmain() {
+ 
+   apic_enable_lapic();
+ 
++  // TODO 課題A: ここでページフォルトハンドラを登録する事
++  idt_register_callback(14, fault_handler);
++
++  int *ptr = (int *)((uint64_t)0x4000000000);
++
++  *ptr = 0;
++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
++
++  __sync_fetch_and_add(&status, 1);
++
+   apic_start_other_processors();
+ 
+-  // TODO ここにコードを追加
++  while(status != apic_get_cpu_nums()) {
++  }
++
++  pt1[0] = PTE_PRESENT_BIT | PTE_WRITE_BIT | PTE_USER_BIT | (0x1000000 + 4096);
++  *ptr = 0;
++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
++
++  // TODO 課題B: TLB shootdown通知コードをここに書く事
++  for (int i = 1; i < apic_get_cpu_nums; i++) {
++      idt_register_callback(32+apic_get_id(), ipi_handler);
++      apic_send_ipi(apic_get_id()+i, 32+apic_get_id());
++  }
++
++  __sync_fetch_and_add(&status, 1);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");
+@@ -60,7 +96,26 @@ void cmain_for_ap() {
+ 
+   idt_init_for_each_proc();
+ 
+-  // TODO ここにコードを追加
++  // TODO 課題B: ここでTLB shootdown受信ハンドラを登録する事
++  idt_register_callback(32+apic_get_id(), ipi_recv_handler);
++
++  int *ptr = (int *)((uint64_t)0x4000000000);
++
++  while(status != apic_get_id()) {
++  }
++
++  (*ptr)++;
++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
++
++  __sync_fetch_and_add(&status, 1);
++
++  while(status != apic_get_id() + apic_get_cpu_nums()) {
++  }
++
++  (*ptr)++;
++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
++
++  __sync_fetch_and_add(&status, 1);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");
