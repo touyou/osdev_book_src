@@ -1,7 +1,7 @@
 /*
  *            framebuffer.c
  * written by Shinichi Awamoto, 2017
- * 
+ *
  * 画面描画関連の関数の定義
  */
 
@@ -18,9 +18,43 @@ void framebuffer_init(struct multiboot_tag_framebuffer_common *tag) {
   framebuffer_tag = tag;
 }
 
+#define MARGIN 4
+
 // char文字の描画
 static void framebuffer_putc(char c) {
   // TODO
+  uint32_t width = framebuffer_tag->framebuffer_width;
+  uint32_t height = framebuffer_tag->framebuffer_height;
+  uint8_t bpp = framebuffer_tag->framebuffer_bpp / 8;
+  unsigned char *p = (unsigned char *)framebuffer_tag->framebuffer_addr;
+
+  static int x = MARGIN;
+  static int y = MARGIN;
+
+  if (c == '\n') {
+    x = MARGIN;
+    y += 8 + MARGIN;
+  } else {
+    for (int i=0; i<8; ++i) {
+      for (int j=0; j<8; ++j) {
+        int npos = (i+y) * bpp * width + (j+x) * bpp;
+        if (font[c][i]>>(7-j)&1) {
+            p[npos] = 0x00;
+            p[npos+1] = 0xff;
+            p[npos+2] = 0x00;
+        } else {
+            p[npos] = 0x00;
+            p[npos+1] = 0x00;
+            p[npos+2] = 0x00;
+        }
+      }
+    }
+    x+= 8 + MARGIN;
+    if (x >= width-MARGIN) {
+        x = MARGIN;
+        y += 8 + MARGIN;
+    }
+  }
 }
 
 // https://github.com/swetland/xv6 より引用
@@ -49,6 +83,7 @@ static void framebuffer_putc(char c) {
 /* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 static char digits[] = "0123456789abcdef";
+volatile int lock = 0;
 
 static void
 framebuffer_printptr(uint64_t x) {
@@ -92,7 +127,7 @@ framebuffer_printf(char *fmt, ...)
 
   if (fmt == 0)
     panic();
-
+  while (__sync_lock_test_and_set(&lock, 1));
   for(i = 0; (c = fmt[i] & 0xff) != 0; i++){
     if(c != '%'){
       framebuffer_putc(c);
@@ -127,4 +162,5 @@ framebuffer_printf(char *fmt, ...)
       break;
     }
   }
+  __sync_lock_release(&lock);
 }

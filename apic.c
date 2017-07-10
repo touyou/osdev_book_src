@@ -1,7 +1,7 @@
 /*
  *            acpi.h
  * written by Shinichi Awamoto, 2017
- * 
+ *
  * APIC関連の関数の定義
  */
 
@@ -67,7 +67,7 @@ static inline void write_icr(uint8_t dest, uint32_t flags) {
 void apic_init(struct apic_descriptor *madt) {
   manager.lapic_base_addr = madt->local_interrupt_controller_address;
   manager.ncpu = 0;
-  
+
   // MADTを解析して、Local APIC IDの一覧を取得する
   for (uint32_t offset = sizeof(struct apic_descriptor); offset < madt->header.length;) {
     struct apic_struct_header *header = (struct apic_struct_header *)((uint8_t *)madt + offset);
@@ -116,7 +116,7 @@ void apic_send_ipi(uint8_t destid, int vector) {
   write_icr(destid, LAPIC_DELIVERY_MODE_FIXED | LAPIC_REG_ICR_TRIGGER_MODE_LEVEL | LAPIC_REG_ICR_DESTSHORTHAND_NOSHORTHAND | vector);
 }
 
-void entryothers(); 
+void entryothers();
 
 #define IO_PORT_RTC (0x70)
 
@@ -169,9 +169,9 @@ void apic_start_other_processors() {
   for (int i = 1; i < manager.ncpu; i++) {
     is_ap_booted = 0;
     stack_for_ap[0] = (uint64_t)&stack_buffer_for_ap[i * 4096];
-    
+
     start_ap(i);
-    
+
     while(!is_ap_booted) {
       __asm__ volatile("pause;":::"memory");
     }
@@ -181,6 +181,17 @@ void apic_start_other_processors() {
 // AP用のAPIC初期化ルーチン
 void apic_initialize_ap() {
   is_ap_booted = 1;
-  
+
   apic_enable_lapic();
+}
+
+// APIC IDを返す
+uint8_t apic_get_id() {
+  uint32_t addr = manager.lapic_base_addr + 0x20; // ダミー実装
+  return *((uint32_t *)(addr+3));
+}
+
+// ハードウェアスレッド数を返す
+int apic_get_cpu_nums() {
+  return manager.ncpu;
 }

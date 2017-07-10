@@ -21,7 +21,8 @@
 
 .balign 8
 
-.globl pml4t
+  .globl pml4t
+  .globl pt1
   
 .extern main
 multibootheader_start:
@@ -108,6 +109,18 @@ entry:
   movl %eax, 24(%edi)
   movl $0, 28(%edi)
 
+
+  movl $pd1, %eax
+  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT), %eax
+  movl %eax, 2048(%edi)
+  movl $0, 2052(%edi)
+
+  movl $pd1, %edi
+  movl $pt1, %eax
+  orl  $(PDE_PRESENT_BIT | PDE_WRITE_BIT | PDE_USER_BIT), %eax
+  movl %eax, 0(%edi)
+  movl $0, 4(%edi)
+
   // ページテーブルの構築はここまで
 
   // PAE&PGEビットを立てる
@@ -171,5 +184,11 @@ pml4t:
   .skip 4096
 
 pdpt1:
+  .skip 4096
+
+pd1:
+  .skip 4096
+
+pt1:
   .skip 4096
 

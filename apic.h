@@ -18,3 +18,5 @@ void apic_send_eoi();
 void apic_send_ipi(uint8_t destid, int vector);
 void apic_start_other_processors();
 void apic_initialize_ap();
+uint8_t apic_get_id();
+int apic_get_cpu_nums();

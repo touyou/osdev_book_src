@@ -62,7 +62,7 @@ $(MOUNT_DIR)/core/$(KERNEL): $(MOUNT_DIR)/core/ $(KERNEL)
 .PHONY: runqemu killqemu
 
 runqemu: image
-	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
+	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -m 1G -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
 	sleep 0.2s
 	echo "set_password vnc a" | netcat $(TELNET_ADDR) $(TELNET_PORT)
 

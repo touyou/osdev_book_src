@@ -1,0 +1,159 @@
+diff --git a/apic.c b/apic.c
+index c6993df..a10e13b 100644
+--- a/apic.c
++++ b/apic.c
+@@ -184,3 +184,13 @@ void apic_initialize_ap() {
+   
+   apic_enable_lapic();
+ }
++
++// APIC IDを返す
++uint8_t apic_get_id() {
++  return 0; // ダミー実装
++}
++
++// ハードウェアスレッド数を返す
++int apic_get_cpu_nums() {
++  return manager.ncpu;
++}
+diff --git a/apic.h b/apic.h
+index fd25d66..f07bdca 100644
+--- a/apic.h
++++ b/apic.h
+@@ -18,3 +18,5 @@ void apic_send_eoi();
+ void apic_send_ipi(uint8_t destid, int vector);
+ void apic_start_other_processors();
+ void apic_initialize_ap();
++uint8_t apic_get_id();
++int apic_get_cpu_nums();
+diff --git a/boot.S b/boot.S
+index 9e3e965..b7be2e0 100644
+--- a/boot.S
++++ b/boot.S
+@@ -21,7 +21,8 @@
+ 
+ .balign 8
+ 
+-.globl pml4t
++  .globl pml4t
++  .globl pt1
+   
+ .extern main
+ multibootheader_start:
+@@ -108,6 +109,18 @@ entry:
+   movl %eax, 24(%edi)
+   movl $0, 28(%edi)
+ 
++
++  movl $pd1, %eax
++  orl  $(PDPTE_PRESENT_BIT | PDPTE_WRITE_BIT | PDPTE_USER_BIT), %eax
++  movl %eax, 2048(%edi)
++  movl $0, 2052(%edi)
++
++  movl $pd1, %edi
++  movl $pt1, %eax
++  orl  $(PDE_PRESENT_BIT | PDE_WRITE_BIT | PDE_USER_BIT), %eax
++  movl %eax, 0(%edi)
++  movl $0, 4(%edi)
++
+   // ページテーブルの構築はここまで
+ 
+   // PAE&PGEビットを立てる
+@@ -173,3 +186,9 @@ pml4t:
+ pdpt1:
+   .skip 4096
+ 
++pd1:
++  .skip 4096
++
++pt1:
++  .skip 4096
++
+diff --git a/build_rule.mk b/build_rule.mk
+index 4ad6466..53c0ccf 100644
+--- a/build_rule.mk
++++ b/build_rule.mk
+@@ -62,7 +62,7 @@ $(MOUNT_DIR)/core/$(KERNEL): $(MOUNT_DIR)/core/ $(KERNEL)
+ .PHONY: runqemu killqemu
+ 
+ runqemu: image
+-	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
++	sudo qemu-system-x86_64 $(QEMU_UEFI_OPTION) -cpu qemu64 -smp 8 -m 1G -machine q35 -monitor telnet:$(TELNET_ADDR):$(TELNET_PORT),server,nowait -vnc 0.0.0.0:0,password -drive format=raw,file=$(IMAGE) &
+ 	sleep 0.2s
+ 	echo "set_password vnc a" | netcat $(TELNET_ADDR) $(TELNET_PORT)
+ 
+diff --git a/main.c b/main.c
+index c388008..44c07a8 100644
+--- a/main.c
++++ b/main.c
+@@ -12,10 +12,11 @@
+ #include "idt.h"
+ #include "multiboot2.h"
+ #include "segment.h"
++#include "paging.h"
+ 
+-void func(struct regs *rs) {
+-  __asm__ volatile("cli;hlt;");
+-}
++int status = 0;
++
++extern uint64_t pt1[256];
+ 
+ void cmain() {
+   struct rsdp_descriptor *rsdp = multiboot_get_rsdp_desc();
+@@ -44,9 +45,27 @@ void cmain() {
+ 
+   apic_enable_lapic();
+ 
++  // TODO 課題A: ここでページフォルトハンドラを登録する事
++  
++  int *ptr = (int *)((uint64_t)0x4000000000);
++
++  *ptr = 0;
++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
++
++  __sync_fetch_and_add(&status, 1);
++
+   apic_start_other_processors();
+ 
+-  // TODO ここにコードを追加
++  while(status != apic_get_cpu_nums()) {
++  }
++
++  pt1[0] = PTE_PRESENT_BIT | PTE_WRITE_BIT | PTE_USER_BIT | (0x1000000 + 4096);
++  *ptr = 0;
++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
++
++  // TODO 課題B: TLB shootdown通知コードをここに書く事
++
++  __sync_fetch_and_add(&status, 1);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");
+@@ -60,7 +79,25 @@ void cmain_for_ap() {
+ 
+   idt_init_for_each_proc();
+ 
+-  // TODO ここにコードを追加
++  // TODO 課題B: ここでTLB shootdown受信ハンドラを登録する事
++
++  int *ptr = (int *)((uint64_t)0x4000000000);
++
++  while(status != apic_get_id()) {
++  }
++
++  (*ptr)++;
++  framebuffer_printf("[%d:%d]", apic_get_id(), *ptr);
++    
++  __sync_fetch_and_add(&status, 1);
++
++  while(status != apic_get_id() + apic_get_cpu_nums()) {
++  }
++  
++  (*ptr)++;
++  framebuffer_printf("<%d:%d>", apic_get_id(), *ptr);
++
++  __sync_fetch_and_add(&status, 1);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");
