@@ -1,0 +1,239 @@
+diff --git a/apic.c b/apic.c
+index c6993df..a5875db 100644
+--- a/apic.c
++++ b/apic.c
+@@ -1,7 +1,7 @@
+ /*
+  *            acpi.h
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * APIC関連の関数の定義
+  */
+ 
+@@ -67,7 +67,7 @@ static inline void write_icr(uint8_t dest, uint32_t flags) {
+ void apic_init(struct apic_descriptor *madt) {
+   manager.lapic_base_addr = madt->local_interrupt_controller_address;
+   manager.ncpu = 0;
+-  
++
+   // MADTを解析して、Local APIC IDの一覧を取得する
+   for (uint32_t offset = sizeof(struct apic_descriptor); offset < madt->header.length;) {
+     struct apic_struct_header *header = (struct apic_struct_header *)((uint8_t *)madt + offset);
+@@ -116,7 +116,7 @@ void apic_send_ipi(uint8_t destid, int vector) {
+   write_icr(destid, LAPIC_DELIVERY_MODE_FIXED | LAPIC_REG_ICR_TRIGGER_MODE_LEVEL | LAPIC_REG_ICR_DESTSHORTHAND_NOSHORTHAND | vector);
+ }
+ 
+-void entryothers(); 
++void entryothers();
+ 
+ #define IO_PORT_RTC (0x70)
+ 
+@@ -169,9 +169,9 @@ void apic_start_other_processors() {
+   for (int i = 1; i < manager.ncpu; i++) {
+     is_ap_booted = 0;
+     stack_for_ap[0] = (uint64_t)&stack_buffer_for_ap[i * 4096];
+-    
++
+     start_ap(i);
+-    
++
+     while(!is_ap_booted) {
+       __asm__ volatile("pause;":::"memory");
+     }
+@@ -181,6 +181,10 @@ void apic_start_other_processors() {
+ // AP用のAPIC初期化ルーチン
+ void apic_initialize_ap() {
+   is_ap_booted = 1;
+-  
++
+   apic_enable_lapic();
+ }
++
++uint32_t get_baseaddr() {
++  return manager.lapic_base_addr + 0x20;
++}
+diff --git a/apic.h b/apic.h
+index fd25d66..a9fdb47 100644
+--- a/apic.h
++++ b/apic.h
+@@ -1,7 +1,7 @@
+ /*
+  *            apic.h
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * APIC関連の関数の宣言、構造体の定義
+  */
+ 
+@@ -18,3 +18,4 @@ void apic_send_eoi();
+ void apic_send_ipi(uint8_t destid, int vector);
+ void apic_start_other_processors();
+ void apic_initialize_ap();
++uint32_t get_baseaddr();
+diff --git a/common.h b/common.h
+index ed79157..d7ad082 100644
+--- a/common.h
++++ b/common.h
+@@ -37,3 +37,4 @@ static inline void outb(int pin, uint8_t data) {
+   __asm__ volatile("outb %%al, %%dx"::"d"(pin), "a"(data));
+ }
+ 
++uint8_t font[128][8];
+diff --git a/framebuffer.c b/framebuffer.c
+index 2be7263..3d96c65 100644
+--- a/framebuffer.c
++++ b/framebuffer.c
+@@ -1,7 +1,7 @@
+ /*
+  *            framebuffer.c
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * 画面描画関連の関数の定義
+  */
+ 
+@@ -18,9 +18,43 @@ void framebuffer_init(struct multiboot_tag_framebuffer_common *tag) {
+   framebuffer_tag = tag;
+ }
+ 
++#define MARGIN 4
++
+ // char文字の描画
+ static void framebuffer_putc(char c) {
+   // TODO
++  uint32_t width = framebuffer_tag->framebuffer_width;
++  uint32_t height = framebuffer_tag->framebuffer_height;
++  uint8_t bpp = framebuffer_tag->framebuffer_bpp / 8;
++  unsigned char *p = (unsigned char *)framebuffer_tag->framebuffer_addr;
++
++  static int x = MARGIN;
++  static int y = MARGIN;
++
++  if (c == '\n') {
++    x = MARGIN;
++    y += 8 + MARGIN;
++  } else {
++    for (int i=0; i<8; ++i) {
++      for (int j=0; j<8; ++j) {
++        int npos = (i+y) * bpp * width + (j+x) * bpp;
++        if (font[c][i]>>(7-j)&1) {
++            p[npos] = 0x00;
++            p[npos+1] = 0xff;
++            p[npos+2] = 0x00;
++        } else {
++            p[npos] = 0x00;
++            p[npos+1] = 0x00;
++            p[npos+2] = 0x00;
++        }
++      }
++    }
++    x+= 8 + MARGIN;
++    if (x >= width-MARGIN) {
++        x = MARGIN;
++        y += 8 + MARGIN;
++    }
++  }
+ }
+ 
+ // https://github.com/swetland/xv6 より引用
+@@ -49,6 +83,7 @@ static void framebuffer_putc(char c) {
+ /* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+ 
+ static char digits[] = "0123456789abcdef";
++volatile int lock = 0;
+ 
+ static void
+ framebuffer_printptr(uint64_t x) {
+@@ -92,7 +127,7 @@ framebuffer_printf(char *fmt, ...)
+ 
+   if (fmt == 0)
+     panic();
+-
++  while (__sync_lock_test_and_set(&lock, 1));
+   for(i = 0; (c = fmt[i] & 0xff) != 0; i++){
+     if(c != '%'){
+       framebuffer_putc(c);
+@@ -127,4 +162,5 @@ framebuffer_printf(char *fmt, ...)
+       break;
+     }
+   }
++__sync_lock_release(&lock);
+ }
+diff --git a/main.c b/main.c
+index c388008..82e9ccb 100644
+--- a/main.c
++++ b/main.c
+@@ -1,7 +1,7 @@
+ /*
+  *            main.c
+  * written by Shinichi Awamoto, 2017
+- * 
++ *
+  * 各種ハードウェア初期化関数の呼び出し
+  */
+ 
+@@ -17,6 +17,26 @@ void func(struct regs *rs) {
+   __asm__ volatile("cli;hlt;");
+ }
+ 
++void ipi_handler(struct regs *rs) {}
++
++uint64_t get_nanosec() {
++   struct hpet_descriptor *hp = acpi_get_hpet_desc();
++   uint64_t addr = hp->address;
++   *((uint64_t *)(addr+0x10)) |= 1;
++   uint32_t ccp = *((uint32_t *)(addr + 4));
++   uint64_t mcv = *((uint64_t *)(addr + 0xf0));
++   return ccp * mcv / 1000000;
++ }
++
++ void wait(int sec) {
++   uint64_t start = get_nanosec();
++   while (1) {
++     uint64_t cur = get_nanosec();
++     if (cur - start > 1000000000) break;
++   }
++   return;
++ }
++
+ void cmain() {
+   struct rsdp_descriptor *rsdp = multiboot_get_rsdp_desc();
+   if (rsdp == NULL) {
+@@ -47,6 +67,16 @@ void cmain() {
+   apic_start_other_processors();
+ 
+   // TODO ここにコードを追加
++  uint32_t addr = get_baseaddr();
++  uint32_t apid = *((uint32_t *)(addr+3));
++
++  framebuffer_printf("%d\n", apid);
++
++  // wait 1s
++  wait(1);
++
++  idt_register_callback(32+(int)apid, ipi_handler);
++  apic_send_ipi((uint8_t)apid + 1, 32+(int)apid);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");
+@@ -60,7 +90,19 @@ void cmain_for_ap() {
+ 
+   idt_init_for_each_proc();
+ 
++  __asm__ volatile("hlt;");
++
+   // TODO ここにコードを追加
++  uint32_t addr = get_baseaddr();
++  uint32_t apid = *((uint32_t *)(addr+3));
++
++  framebuffer_printf("%d\n", apid);
++
++  // wait 1s
++  wait(1);
++
++  idt_register_callback(32+(int)apid, ipi_handler);
++  apic_send_ipi((uint8_t)apid + 1, 32+(int)apid);
+ 
+   while(1) {
+     __asm__ volatile("hlt;");

@@ -37,3 +37,4 @@ static inline void outb(int pin, uint8_t data) {
   __asm__ volatile("outb %%al, %%dx"::"d"(pin), "a"(data));
 }
 
+uint8_t font[128][8];
