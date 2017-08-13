@@ -18,7 +18,8 @@ uint64_t get_nanosec() {
   *((uint64_t *)(addr+0x10)) |= 1;
   uint32_t ccp = *((uint32_t *)(addr + 4));
   uint64_t mcv = *((uint64_t *)(addr + 0xf0));
-  return ccp * mcv / 1000000;
+  // 三回MMIOを行っているので3で割っている
+  return ccp * mcv / 1000000 / 3;
 }
 
 void cost_exec() {
